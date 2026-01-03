@@ -270,7 +270,7 @@ export function BubbleApp() {
           <div className="w-full">
             <div className="relative rounded-2xl border bg-card px-4 py-3 text-sm leading-relaxed shadow-sm">
               <div className="whitespace-pre-wrap break-words">{bubbleText}</div>
-              <div className="absolute -top-2 left-10 size-4 rotate-45 border-l border-t bg-card" />
+              <div className="absolute -top-2 left-1/2 size-4 -translate-x-1/2 rotate-45 border-l border-t bg-card" />
             </div>
             {errorText ? <div className="mt-2 text-xs text-destructive">{errorText}</div> : null}
           </div>
