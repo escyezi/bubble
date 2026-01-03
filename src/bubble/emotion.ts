@@ -3,8 +3,8 @@ import type { Emotion } from "./types";
 export const EMOTICONS: Record<Emotion, string> = {
   neutral: "(・_・)",
   happy: "(≧▽≦)",
-  sad: "(；ω；)",
-  angry: "(╬ಠ益ಠ)",
+  sad: "(>_<)",
+  angry: "(｀へ´)",
   confused: "(⊙_⊙？)",
   thinking: "(￢_￢)",
   excited: "(☆▽☆)",
