@@ -19,6 +19,11 @@ export type Settings = {
   model: string;
 };
 
+export type MessageSegment = {
+  text: string;
+  emotion?: Emotion;
+};
+
 export type Message = {
   id: string;
   role: Role;
@@ -26,10 +31,7 @@ export type Message = {
   rawText?: string;
   createdAt: number;
   emotion?: Emotion;
-  segments?: Array<{
-    text: string;
-    emotion?: Emotion;
-  }>;
+  segments?: MessageSegment[];
 };
 
 export type Conversation = {

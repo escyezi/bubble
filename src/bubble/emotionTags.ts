@@ -4,6 +4,75 @@ export type EmotionTagEvent =
   | { type: "text"; text: string }
   | { type: "emotion"; emotion: Emotion; rawTag: string };
 
+const EMOTION_TAG_SHORT: Record<Emotion, string> = {
+  neutral: "n",
+  happy: "h",
+  sad: "s",
+  angry: "a",
+  confused: "c",
+  thinking: "t",
+  excited: "ex",
+  surprised: "sp",
+  shy: "sh",
+  sleepy: "sl",
+  love: "lv",
+};
+
+const EMOTION_TAG_LABELS: Record<Emotion, string> = {
+  neutral: "neutral",
+  happy: "happy",
+  sad: "sad",
+  angry: "angry",
+  confused: "confused",
+  thinking: "thinking",
+  excited: "excited",
+  surprised: "surprised",
+  shy: "shy",
+  sleepy: "sleepy",
+  love: "love",
+};
+
+const EMOTION_TAG_ALIASES: Record<Emotion, string[]> = {
+  neutral: ["n", "neutral"],
+  happy: ["h", "happy"],
+  sad: ["s", "sad"],
+  angry: ["a", "angry"],
+  confused: ["c", "confused"],
+  thinking: ["t", "thinking"],
+  excited: ["ex", "excited"],
+  surprised: ["sp", "surprised", "surprise"],
+  shy: ["sh", "shy"],
+  sleepy: ["sl", "sleepy", "sleep"],
+  love: ["lv", "love"],
+};
+
+const EMOTION_ALIAS_MAP = new Map<string, Emotion>(
+  Object.entries(EMOTION_TAG_ALIASES).flatMap(([emotion, aliases]) =>
+    aliases.map(alias => [alias.toLowerCase(), emotion as Emotion]),
+  ),
+);
+
+const EMOTION_ALIAS_PATTERN = Object.values(EMOTION_TAG_ALIASES)
+  .flat()
+  .map(escapeRegExp)
+  .join("|");
+
+const EMOTION_TAG_REGEX = new RegExp(`\\[\\[(?:e:)?(?:${EMOTION_ALIAS_PATTERN})\\]\\]`, "gi");
+
+export const EMOTION_TAG_SHORT_LIST = Object.values(EMOTION_TAG_SHORT);
+
+export function buildEmotionTagInstruction() {
+  const tagList = EMOTION_TAG_SHORT_LIST.map(tag => `[[${tag}]]`).join(" ");
+  const descList = Object.entries(EMOTION_TAG_SHORT)
+    .map(([emotion, tag]) => `${tag} ${EMOTION_TAG_LABELS[emotion as Emotion]}`)
+    .join(", ");
+  return `Emotion tags must be exactly one of: ${tagList} (${descList}). Tags should appear right before the text they affect. Do not explain the tags.`;
+}
+
+export function stripEmotionTags(text: string): string {
+  return text.replace(EMOTION_TAG_REGEX, "");
+}
+
 // Emotion tags are embedded inline in assistant text and should NOT be displayed.
 // Recommended tag format:
 // - Short: [[n]] [[h]] [[s]] [[a]] [[c]] [[t]]
@@ -67,20 +136,9 @@ function parseEmotion(raw: string): Emotion | null {
   let v = raw.trim();
   if (!v) return null;
   if (v.toLowerCase().startsWith("e:")) v = v.slice(2).trim();
-  const lower = v.toLowerCase();
+  return EMOTION_ALIAS_MAP.get(v.toLowerCase()) ?? null;
+}
 
-  if (lower === "n" || lower === "neutral") return "neutral";
-  if (lower === "h" || lower === "happy") return "happy";
-  if (lower === "s" || lower === "sad") return "sad";
-  if (lower === "a" || lower === "angry") return "angry";
-  if (lower === "c" || lower === "confused") return "confused";
-  if (lower === "t" || lower === "thinking") return "thinking";
-
-  if (lower === "ex" || lower === "excited") return "excited";
-  if (lower === "sp" || lower === "surprised" || lower === "surprise") return "surprised";
-  if (lower === "sh" || lower === "shy") return "shy";
-  if (lower === "sl" || lower === "sleepy" || lower === "sleep") return "sleepy";
-  if (lower === "lv" || lower === "love") return "love";
-
-  return null;
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

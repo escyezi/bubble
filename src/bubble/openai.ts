@@ -1,3 +1,4 @@
+import { buildEmotionTagInstruction } from "./emotionTags";
 import type { Message, Settings } from "./types";
 
 export type OpenAIResult = {
@@ -100,7 +101,10 @@ export async function streamOpenAIChat(
   const body = res.body;
   if (!body) {
     // Some environments don't expose a readable stream.
-    return await callOpenAIChat(settings, messages);
+    const { rawText } = await callOpenAIChat(settings, messages);
+    if (rawText) handlers.onDeltaText(rawText);
+    handlers.onDone?.();
+    return { rawText };
   }
 
   const reader = body.getReader();
@@ -156,11 +160,17 @@ function safeJsonParse(raw: string): any {
   }
 }
 
+const SYSTEM_PROMPT = [
+  "You are Bubble, a friendly companion assistant. Reply concisely.",
+  "Output plain text only (no JSON, no markdown).",
+  "Embed emotion tags inline to control the avatar emotion.",
+  buildEmotionTagInstruction(),
+].join(" ");
+
 function toOpenAIMessages(messages: Message[]) {
   const system = {
     role: "system" as const,
-    content:
-      "You are Bubble, a friendly companion assistant. Reply concisely. Output plain text only (no JSON, no markdown). Embed emotion tags inline to control the avatar emotion. Emotion tags must be exactly one of: [[n]] [[h]] [[s]] [[a]] [[c]] [[t]] [[ex]] [[sp]] [[sh]] [[sl]] [[lv]] (n neutral, h happy, s sad, a angry, c confused, t thinking, ex excited, sp surprised, sh shy, sl sleepy, lv love). Tags should appear right before the text they affect. Do not explain the tags.",
+    content: SYSTEM_PROMPT,
   };
   return [
     system,
