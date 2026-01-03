@@ -13,7 +13,7 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
 - **底部**：输入框 + 发送按钮。
 - **快捷按钮**（输入框上方）：
   - `吟诵俳句吧！`：发送同名提示词
-  - `讲个笑话`：发送“讲个笑话，然后换行解释一下笑话的笑点，解释完笑点后直接接一个逗号并以\"令人忍俊不禁\"结尾”
+  - `讲个笑话`：发送“讲个笑话，然后换行解释一下笑话的笑点，解释完笑点后直接接一个逗号并以\"令人忍俊不禁。\"结尾”
   - `吐槽一下`：发送“风趣地吐槽一下社会现象”
 
 ### 1.2 右上角
@@ -66,7 +66,7 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
   - **text**：进入待输出队列
 - UI 使用打字机模式逐字输出：每次 tick 输出 1 个字符，支持标点停顿。
 
-实现文件：`src/bubble/BubbleApp.tsx`
+实现文件：`src/bubble/BubbleApp.tsx`、`src/bubble/chatUtils.ts`
 
 ### 3.2 文字换行策略
 - **不人为插入换行**。
@@ -97,15 +97,23 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
 ## 5. 主要文件与职责
 
 - `src/bubble/BubbleApp.tsx`
-  - 页面结构、弹窗、输入/发送逻辑
+  - 页面结构、输入/发送逻辑
   - 流式增量接入 + 情绪标签事件队列
-  - 打字机输出与表情切换
+  - 打字机输出与表情切换（与工具函数协作）
+- `src/bubble/components/SettingsModal.tsx`
+  - 设置弹窗 UI 与表单
+- `src/bubble/components/HistoryModal.tsx`
+  - 记录弹窗 UI 与清空逻辑
 - `src/bubble/openai.ts`
   - OpenAI 兼容 `/chat/completions` 调用
   - SSE 流式解析，回调 `onDeltaText`
   - 系统提示词（要求使用情绪标签）
 - `src/bubble/emotionTags.ts`
   - 情绪标签流式解析器（支持 tag 在 chunk 边界被切断）
+- `src/bubble/chatUtils.ts`
+  - 消息更新与打字机工具函数（分段、字符节奏等）
+- `src/bubble/constants.ts`
+  - 常量配置（存储 key、默认设置、打字机节奏、快捷提示词）
 - `src/bubble/storage.ts`
   - `useLocalStorageState`（带 debounce）
 - `src/bubble/types.ts`
