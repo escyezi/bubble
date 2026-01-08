@@ -8,6 +8,10 @@ export interface BubbleStorage {
   getSettings(): Promise<Settings | null>;
   setSettings(next: Settings): Promise<void>;
 
+  getCurrentConversationId(): Promise<string | null>;
+  setCurrentConversationId(id: string | null): Promise<void>;
+  getCurrentConversation(): Promise<Conversation | null>;
+
   getLatestConversation(): Promise<Conversation | null>;
   upsertConversation(conversation: Conversation): Promise<void>;
 

@@ -66,7 +66,7 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
   - **text**：进入待输出队列
 - UI 使用打字机模式逐字输出：每次 tick 输出 1 个字符，支持标点停顿。
 
-实现文件：`src/bubble/state/actions.ts`、`src/bubble/chatUtils.ts`
+实现文件：`src/bubble/state/runtime.ts`、`src/bubble/chatUtils.ts`
 
 ### 3.2 文字换行策略
 - **不人为插入换行**。
@@ -87,13 +87,14 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
   - DB 名：`bubble`
   - `settings` 表：仅 1 行，主键固定 `id="default"`，带 `updatedAt`
   - `conversations` 表：以 `Conversation.id` 为主键，带 `updatedAt`
+  - `app` 表：仅 1 行，主键固定 `id="default"`，保存 `currentConversationId`
 
 实现文件：`src/bubble/storage/*`
 
 ### 4.2 Hydration（启动读取）
 由于 IndexedDB 是异步接口，启动时会先用默认值渲染，再在挂载后异步加载存储数据覆盖到状态中。Hydrate 完成前会禁用发送（避免“未加载完就写回覆盖”）。
 
-实现文件：`src/bubble/state/state.ts`、`src/bubble/state/actions.ts`
+实现文件：`src/bubble/state/state.ts`、`src/bubble/state/hydration.ts`、`src/bubble/state/persistence.ts`
 
 ### 4.3 历史记录“保留标签”的策略
 - 主界面显示：使用打字机输出后的 `message.text`（不包含标签）。
@@ -102,14 +103,14 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
 数据结构：`src/bubble/types.ts`
 
 ### 4.4 写入节流与类型安全
-流式过程中消息会频繁更新。MVP 中对持久化做了 debounce（settings 200ms / conversation 250ms）避免频繁落盘；同时写入前会把状态转换为“纯 JSON 对象”，避免把 Valtio Proxy 直接写入 IndexedDB 导致结构化克隆失败。
+流式过程中消息会频繁更新。MVP 中对持久化做了 debounce（settings 200ms / conversation 250ms）避免频繁落盘；同时写入前会对 Valtio 数据做快照并拷贝（`snapshot + structuredClone`，必要时回退 JSON），避免把 Proxy 直接写入 IndexedDB 导致结构化克隆失败。
 
-实现文件：`src/bubble/state/actions.ts`
+实现文件：`src/bubble/state/persistence.ts`
 
 ### 4.5 清空对话
-“清空”会真正删除存储层的对话记录（Dexie：清空 `conversations` 表；localStorage：移除对应 key），同时在内存中切换到一个新会话继续聊天，不会把“空会话”写回存储。
+“清空”会真正删除存储层的对话记录（Dexie：清空 `conversations` 表并清掉当前会话指针；localStorage：移除对应 key），同时在内存中切换到一个新会话继续聊天，不会把“空会话”写回存储。
 
-实现文件：`src/bubble/state/actions.ts`、`src/bubble/storage/*`
+实现文件：`src/bubble/state/actions.ts`、`src/bubble/state/persistence.ts`、`src/bubble/storage/*`
 
 ---
 
@@ -125,9 +126,13 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
   - 全局状态（valtio proxy）
 - `src/bubble/state/actions.ts`
   - 业务动作（send/clear/open/close 等）
+- `src/bubble/state/hydration.ts`
+  - 启动 hydration：从 storage 读入 settings + 当前会话
+- `src/bubble/state/persistence.ts`
+  - 持久化订阅、debounce、flush、pagehide、pause/restore
+- `src/bubble/state/runtime.ts`
   - 流式增量接入 + 情绪标签事件队列
   - 打字机输出与表情切换
-  - Hydration + 持久化订阅
 - `src/bubble/openai.ts`
   - OpenAI 兼容 `/chat/completions` 调用
   - SSE 流式解析，回调 `onDeltaText`

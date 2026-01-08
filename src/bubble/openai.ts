@@ -1,5 +1,6 @@
 import { buildEmotionTagInstruction } from "./emotionTags";
 import type { Message, Settings } from "./types";
+import { safeJsonParse } from "./utils/json";
 
 export type OpenAIResult = {
   rawText: string;
@@ -138,7 +139,7 @@ export async function streamOpenAIChat(
           return { rawText };
         }
 
-        const json = safeJsonParse(dataLine);
+        const json = safeJsonParse<any>(dataLine);
         const delta = json?.choices?.[0]?.delta?.content;
         if (typeof delta !== "string") continue;
 
@@ -150,14 +151,6 @@ export async function streamOpenAIChat(
 
   handlers.onDone?.();
   return { rawText };
-}
-
-function safeJsonParse(raw: string): any {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
 }
 
 const SYSTEM_PROMPT = [

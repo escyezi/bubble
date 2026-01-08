@@ -10,15 +10,27 @@ export type SettingsRow = Settings & {
 
 export type ConversationRow = Conversation;
 
+export type AppRow = {
+  id: "default";
+  currentConversationId: string;
+  updatedAt: number;
+};
+
 class BubbleDb extends Dexie {
   settings!: Table<SettingsRow, string>;
   conversations!: Table<ConversationRow, string>;
+  app!: Table<AppRow, string>;
 
   constructor() {
     super("bubble");
     this.version(1).stores({
       settings: "id, updatedAt",
       conversations: "id, updatedAt",
+    });
+    this.version(2).stores({
+      settings: "id, updatedAt",
+      conversations: "id, updatedAt",
+      app: "id",
     });
   }
 }
@@ -51,6 +63,28 @@ export async function createDexieAdapter(): Promise<DexieStorage> {
       await db.settings.put(row);
     },
 
+    async getCurrentConversationId() {
+      const row = await db.app.get("default");
+      return row?.currentConversationId ?? null;
+    },
+
+    async setCurrentConversationId(id) {
+      if (!id) {
+        await db.app.delete("default");
+        return;
+      }
+      const row: AppRow = { id: "default", currentConversationId: id, updatedAt: Date.now() };
+      await db.app.put(row);
+    },
+
+    async getCurrentConversation() {
+      const appRow = await db.app.get("default");
+      const id = appRow?.currentConversationId ?? null;
+      if (!id) return null;
+      const conversationRow = await db.conversations.get(id);
+      return conversationRow ?? null;
+    },
+
     async getLatestConversation() {
       const row = await db.conversations.orderBy("updatedAt").last();
       return row ?? null;
@@ -62,6 +96,7 @@ export async function createDexieAdapter(): Promise<DexieStorage> {
 
     async clearConversations() {
       await db.conversations.clear();
+      await db.app.delete("default");
     },
   };
 }

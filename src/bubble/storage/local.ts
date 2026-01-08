@@ -1,15 +1,7 @@
 import { CONVERSATION_KEY, SETTINGS_KEY } from "../constants";
 import type { Conversation, Settings } from "../types";
+import { safeJsonParse } from "../utils/json";
 import type { BubbleStorage } from "./types";
-
-function safeJsonParse<T>(raw: string | null): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
 
 function safeLocalStorageGet(key: string): string | null {
   if (typeof window === "undefined") return null;
@@ -48,6 +40,19 @@ export function createLocalStorageAdapter(): BubbleStorage {
 
     async setSettings(next) {
       safeLocalStorageSet(SETTINGS_KEY, JSON.stringify(next));
+    },
+
+    async getCurrentConversationId() {
+      const conversation = safeJsonParse<Conversation>(safeLocalStorageGet(CONVERSATION_KEY));
+      return conversation?.id ?? null;
+    },
+
+    async setCurrentConversationId(id) {
+      if (!id) safeLocalStorageRemove(CONVERSATION_KEY);
+    },
+
+    async getCurrentConversation() {
+      return safeJsonParse<Conversation>(safeLocalStorageGet(CONVERSATION_KEY));
     },
 
     async getLatestConversation() {

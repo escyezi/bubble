@@ -1,13 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-export function safeJsonParse<T>(raw: string | null): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
+import { safeJsonParse } from "./utils/json";
+export { safeJsonParse };
 
 export function useLocalStorageState<T>(key: string, defaultValue: T) {
   const initial = useMemo(() => {

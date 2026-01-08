@@ -49,6 +49,33 @@ async function createBubbleStorage(): Promise<BubbleStorage> {
       }
     },
 
+    async getCurrentConversationId() {
+      if (!dexie) return await local.getCurrentConversationId();
+      try {
+        return await dexie.getCurrentConversationId();
+      } catch {
+        return await local.getCurrentConversationId();
+      }
+    },
+
+    async setCurrentConversationId(id) {
+      if (!dexie) return await local.setCurrentConversationId(id);
+      try {
+        await dexie.setCurrentConversationId(id);
+      } catch {
+        await local.setCurrentConversationId(id);
+      }
+    },
+
+    async getCurrentConversation() {
+      if (!dexie) return await local.getCurrentConversation();
+      try {
+        return await dexie.getCurrentConversation();
+      } catch {
+        return await local.getCurrentConversation();
+      }
+    },
+
     async getLatestConversation() {
       if (!dexie) return await local.getLatestConversation();
       try {
@@ -64,6 +91,12 @@ async function createBubbleStorage(): Promise<BubbleStorage> {
         await dexie.upsertConversation(conversation);
       } catch {
         await local.upsertConversation(conversation);
+        return;
+      }
+      try {
+        await dexie.setCurrentConversationId(conversation.id);
+      } catch {
+        // Ignore pointer write failure.
       }
     },
 
@@ -96,6 +129,7 @@ async function maybeMigrateFromLocalStorage(storage: DexieStorage) {
   if (!hasConversation) {
     const conversation = (await local.getLatestConversation()) ?? newConversation();
     await storage.upsertConversation(conversation);
+    await storage.setCurrentConversationId(conversation.id);
   }
 }
 
@@ -105,10 +139,15 @@ export async function loadInitialState(): Promise<{
   conversation: Conversation;
 }> {
   const storage = await getBubbleStorage();
-  const [settings, conversation] = await Promise.all([
+  const [settings, current] = await Promise.all([
     storage.getSettings(),
-    storage.getLatestConversation(),
+    storage.getCurrentConversation(),
   ]);
+  let conversation = current;
+  if (!conversation) {
+    conversation = await storage.getLatestConversation();
+    if (conversation) await storage.setCurrentConversationId(conversation.id);
+  }
 
   return {
     storage,
