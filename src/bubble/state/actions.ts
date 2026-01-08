@@ -1,6 +1,6 @@
 import { subscribeKey } from "valtio/utils";
 
-import { CONVERSATION_KEY, SETTINGS_KEY, TYPING_BASE_MS } from "../constants";
+import { TYPING_BASE_MS } from "../constants";
 import {
   appendToSegments,
   computeDelayMs,
@@ -13,6 +13,7 @@ import { inferEmotionFromText } from "../emotion";
 import { createEmotionTagParser, stripEmotionTags } from "../emotionTags";
 import { streamOpenAIChat } from "../openai";
 import type { Conversation, Emotion, Message, Settings } from "../types";
+import { loadInitialState, type BubbleStorage } from "../storage";
 import { bubbleState } from "./state";
 
 type PendingOp = { type: "text"; text: string } | { type: "emotion"; emotion: Emotion };
@@ -28,67 +29,101 @@ let persistenceStarted = false;
 let stopPersistence: (() => void) | null = null;
 let flushPersistence: (() => void) | null = null;
 let pagehideHandler: (() => void) | null = null;
+let hydratePromise: Promise<void> | null = null;
+let storage: BubbleStorage | null = null;
 
-function safeLocalStorageSet(key: string, raw: string) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, raw);
-  } catch(e) {
-    console.error("Failed to write to localStorage:", e);
-  }
+let pendingSettings: Settings | null = null;
+let pendingConversation: Conversation | null = null;
+let settingsTimer: number | null = null;
+let conversationTimer: number | null = null;
+let lastSavedSettingsRaw = "";
+let lastSavedConversationUpdatedAt = 0;
+let suppressNextEmptyConversationPersist = false;
+let clearHistoryPromise: Promise<void> | null = null;
+
+function toPlainJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 export function initBubbleStatePersistence() {
   if (persistenceStarted) return;
   persistenceStarted = true;
 
-  if (typeof window === "undefined") return;
+  void ensureHydrated().then(() => {
+    if (!storage) return;
 
-  let settingsRaw = "";
-  let conversationRaw = "";
-  let settingsTimer: number | null = null;
-  let conversationTimer: number | null = null;
+    const flush = () => {
+      if (settingsTimer) window.clearTimeout(settingsTimer);
+      if (conversationTimer) window.clearTimeout(conversationTimer);
+      settingsTimer = null;
+      conversationTimer = null;
 
-  const flush = () => {
-    if (settingsTimer) window.clearTimeout(settingsTimer);
-    if (conversationTimer) window.clearTimeout(conversationTimer);
-    settingsTimer = null;
-    conversationTimer = null;
+      const s = storage;
+      if (!s) return;
 
-    if (settingsRaw) safeLocalStorageSet(SETTINGS_KEY, settingsRaw);
-    if (conversationRaw) safeLocalStorageSet(CONVERSATION_KEY, conversationRaw);
-  };
+      if (pendingSettings) {
+        const next = toPlainJson(pendingSettings);
+        pendingSettings = null;
+        void s.setSettings(next);
+        lastSavedSettingsRaw = JSON.stringify(next);
+      }
 
-  const scheduleSettings = (next: Settings) => {
-    const nextRaw = JSON.stringify(next);
-    if (nextRaw === settingsRaw) return;
-    settingsRaw = nextRaw;
-    if (settingsTimer) window.clearTimeout(settingsTimer);
-    settingsTimer = window.setTimeout(() => safeLocalStorageSet(SETTINGS_KEY, settingsRaw), 200);
-  };
+      if (pendingConversation) {
+        const next = toPlainJson(pendingConversation);
+        pendingConversation = null;
+        void s.upsertConversation(next);
+        lastSavedConversationUpdatedAt = next.updatedAt;
+      }
+    };
 
-  const scheduleConversation = (next: Conversation) => {
-    const nextRaw = JSON.stringify(next);
-    if (nextRaw === conversationRaw) return;
-    conversationRaw = nextRaw;
-    if (conversationTimer) window.clearTimeout(conversationTimer);
-    conversationTimer = window.setTimeout(
-      () => safeLocalStorageSet(CONVERSATION_KEY, conversationRaw),
-      200,
-    );
-  };
+    const stopSettings = subscribeKey(bubbleState, "settings", next => {
+      const nextRaw = JSON.stringify(next);
+      if (nextRaw === lastSavedSettingsRaw) return;
+      pendingSettings = next;
 
-  const stopSettings = subscribeKey(bubbleState, "settings", scheduleSettings);
-  const stopConversation = subscribeKey(bubbleState, "conversation", scheduleConversation);
-  stopPersistence = () => {
-    stopSettings();
-    stopConversation();
-  };
-  flushPersistence = flush;
-  pagehideHandler = flush;
-  window.addEventListener("pagehide", flush);
-  scheduleSettings(bubbleState.settings);
-  scheduleConversation(bubbleState.conversation);
+      if (settingsTimer) window.clearTimeout(settingsTimer);
+      settingsTimer = window.setTimeout(() => {
+        const s = storage;
+        if (!s || !pendingSettings) return;
+        const current = toPlainJson(pendingSettings);
+        pendingSettings = null;
+        void s.setSettings(current);
+        lastSavedSettingsRaw = JSON.stringify(current);
+      }, 200);
+    });
+
+    const stopConversation = subscribeKey(bubbleState, "conversation", next => {
+      if (suppressNextEmptyConversationPersist && next.messages.length === 0) {
+        suppressNextEmptyConversationPersist = false;
+        lastSavedConversationUpdatedAt = next.updatedAt;
+        pendingConversation = null;
+        return;
+      }
+      if (next.updatedAt < lastSavedConversationUpdatedAt) return;
+      pendingConversation = next;
+
+      if (conversationTimer) window.clearTimeout(conversationTimer);
+      conversationTimer = window.setTimeout(() => {
+        const s = storage;
+        if (!s || !pendingConversation) return;
+        const current = toPlainJson(pendingConversation);
+        pendingConversation = null;
+        void s.upsertConversation(current);
+        lastSavedConversationUpdatedAt = current.updatedAt;
+      }, 250);
+    });
+
+    stopPersistence = () => {
+      stopSettings();
+      stopConversation();
+    };
+
+    flushPersistence = flush;
+    if (typeof window !== "undefined") {
+      pagehideHandler = flush;
+      window.addEventListener("pagehide", flush);
+    }
+  });
 }
 
 export function cleanupBubbleRuntime() {
@@ -110,6 +145,29 @@ export function cleanupBubbleRuntime() {
   stopPersistence?.();
   stopPersistence = null;
   persistenceStarted = false;
+}
+
+async function ensureHydrated() {
+  if (bubbleState.hydrationStatus === "ready") return;
+  if (hydratePromise) return hydratePromise;
+
+  hydratePromise = (async () => {
+    bubbleState.hydrationStatus = "loading";
+    try {
+      const initial = await loadInitialState();
+      storage = initial.storage;
+      bubbleState.storageKind = initial.storage.kind;
+      bubbleState.settings = initial.settings;
+      bubbleState.conversation = initial.conversation;
+      bubbleState.hydrationStatus = "ready";
+      lastSavedSettingsRaw = JSON.stringify(initial.settings);
+      lastSavedConversationUpdatedAt = initial.conversation.updatedAt;
+    } catch {
+      bubbleState.hydrationStatus = "error";
+    }
+  })();
+
+  return hydratePromise;
 }
 
 export function setComposerText(text: string) {
@@ -137,7 +195,29 @@ export function saveSettings(next: Settings) {
 }
 
 export function clearConversation() {
+  abortController?.abort();
+  abortController = null;
+
+  if (typingTimer) window.clearTimeout(typingTimer);
+  typingTimer = null;
+  pendingOps = [];
+  typingEmotion = "neutral";
+  activeAssistantId = null;
+  parser = null;
+  bubbleState.isSending = false;
+  bubbleState.errorText = null;
+
+  if (conversationTimer) window.clearTimeout(conversationTimer);
+  conversationTimer = null;
+  pendingConversation = null;
+
+  suppressNextEmptyConversationPersist = true;
   bubbleState.conversation = newConversation();
+
+  clearHistoryPromise = (async () => {
+    await ensureHydrated();
+    await storage?.clearConversations();
+  })();
 }
 
 export async function send() {
@@ -148,6 +228,9 @@ export async function send() {
 
 export async function sendText(text: string) {
   if (!text.trim()) return;
+
+  if (clearHistoryPromise) await clearHistoryPromise.catch(() => {});
+  await ensureHydrated();
 
   bubbleState.errorText = null;
   bubbleState.isSending = true;

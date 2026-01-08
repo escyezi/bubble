@@ -98,7 +98,7 @@ export function BubbleApp() {
                 type="button"
                 size="sm"
                 variant="secondary"
-                disabled={snap.isSending}
+                disabled={snap.isSending || snap.hydrationStatus !== "ready"}
                 onClick={() => void sendText(prompt.text)}
               >
                 {prompt.label}
@@ -116,14 +116,14 @@ export function BubbleApp() {
               onKeyDown={e => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  if (!snap.isSending) void send();
+                  if (!snap.isSending && snap.hydrationStatus === "ready") void send();
                 }
               }}
               aria-label="Message input"
             />
             <Button
               onClick={() => void send()}
-              disabled={snap.isSending || !snap.composerText.trim()}
+              disabled={snap.isSending || snap.hydrationStatus !== "ready" || !snap.composerText.trim()}
               className="h-[44px]"
             >
               {snap.isSending ? "…" : "发送"}

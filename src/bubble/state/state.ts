@@ -1,9 +1,9 @@
 import { proxy } from "valtio";
 
-import { CONVERSATION_KEY, DEFAULT_SETTINGS, SETTINGS_KEY } from "../constants";
+import { DEFAULT_SETTINGS } from "../constants";
 import { newConversation } from "../chatUtils";
-import { safeJsonParse } from "../storage";
 import type { Conversation, Settings } from "../types";
+import type { StorageKind } from "../storage";
 
 export type BubbleState = {
   settings: Settings;
@@ -13,23 +13,18 @@ export type BubbleState = {
   errorText: string | null;
   isSettingsOpen: boolean;
   isHistoryOpen: boolean;
+  hydrationStatus: "idle" | "loading" | "ready" | "error";
+  storageKind: StorageKind | null;
 };
 
-function readLocalStorage<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  const parsed = safeJsonParse<T>(window.localStorage.getItem(key));
-  return parsed ?? fallback;
-}
-
-const defaultConversation = newConversation();
-
 export const bubbleState = proxy<BubbleState>({
-  settings: readLocalStorage(SETTINGS_KEY, DEFAULT_SETTINGS),
-  conversation: readLocalStorage(CONVERSATION_KEY, defaultConversation),
+  settings: DEFAULT_SETTINGS,
+  conversation: newConversation(),
   composerText: "",
   isSending: false,
   errorText: null,
   isSettingsOpen: false,
   isHistoryOpen: false,
+  hydrationStatus: "idle",
+  storageKind: null,
 });
-
