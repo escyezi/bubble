@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSnapshot } from "valtio";
 
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,10 @@ export function BubbleApp() {
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const wasSendingRef = useRef(false);
+  // Track IME composition state to prevent input interruption during Chinese/Japanese input
+  const isComposingRef = useRef(false);
+  // Local state for input value to avoid controlled input issues during IME composition
+  const [localInputValue, setLocalInputValue] = useState("");
 
   useGlobalErrorHandlers(reportGlobalError);
 
@@ -52,6 +56,13 @@ export function BubbleApp() {
     if (wasSendingRef.current && !snap.isSending) inputRef.current?.focus();
     wasSendingRef.current = snap.isSending;
   }, [snap.isSending]);
+
+  // Sync global state to local state only when not composing (IME)
+  useEffect(() => {
+    if (!isComposingRef.current) {
+      setLocalInputValue(snap.composerText);
+    }
+  }, [snap.composerText]);
 
   const bubbleText =
     lastAssistant?.text && lastAssistant.text.trim()
@@ -116,12 +127,26 @@ export function BubbleApp() {
           <div className="flex gap-2 items-end">
             <Textarea
               ref={inputRef}
-              value={snap.composerText}
-              onChange={e => setComposerText(e.target.value)}
+              value={localInputValue}
+              onChange={e => {
+                setLocalInputValue(e.target.value);
+                // Only update global state when not composing (IME input)
+                if (!isComposingRef.current) {
+                  setComposerText(e.target.value);
+                }
+              }}
+              onCompositionStart={() => {
+                isComposingRef.current = true;
+              }}
+              onCompositionEnd={e => {
+                isComposingRef.current = false;
+                // Sync the final composed value to global state
+                setComposerText((e.target as HTMLTextAreaElement).value);
+              }}
               placeholder="和 Bubble 说点什么…"
               className="min-h-[44px] max-h-[160px] resize-none"
               onKeyDown={e => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key === "Enter" && !e.shiftKey && !isComposingRef.current) {
                   e.preventDefault();
                   if (!snap.isSending && snap.hydrationStatus === "ready") void send();
                 }
@@ -130,7 +155,7 @@ export function BubbleApp() {
             />
             <Button
               onClick={() => void send()}
-              disabled={snap.isSending || snap.hydrationStatus !== "ready" || !snap.composerText.trim()}
+              disabled={snap.isSending || snap.hydrationStatus !== "ready" || !localInputValue.trim()}
               className="h-[44px]"
             >
               {snap.isSending ? "…" : "发送"}
