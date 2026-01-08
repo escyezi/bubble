@@ -2,6 +2,7 @@ import { snapshot } from "valtio";
 import { subscribeKey } from "valtio/utils";
 
 import type { Conversation, Settings } from "../types";
+import { reportGlobalError } from "./errors";
 import { ensureHydrated, getHydratedStorage } from "./hydration";
 import { bubbleState } from "./state";
 
@@ -49,15 +50,30 @@ function flush() {
   if (pendingSettings) {
     const next = pendingSettings;
     pendingSettings = null;
-    void storage.setSettings(next);
-    lastSavedSettingsRaw = JSON.stringify(next);
+    const nextRaw = JSON.stringify(next);
+    void storage
+      .setSettings(next)
+      .then(() => {
+        lastSavedSettingsRaw = nextRaw;
+      })
+      .catch(err => {
+        if (!pendingSettings) pendingSettings = next;
+        reportGlobalError(err, "persistence.flush.setSettings");
+      });
   }
 
   if (pendingConversation) {
     const next = pendingConversation;
     pendingConversation = null;
-    void storage.upsertConversation(next);
-    lastSavedConversationUpdatedAt = next.updatedAt;
+    void storage
+      .upsertConversation(next)
+      .then(() => {
+        lastSavedConversationUpdatedAt = next.updatedAt;
+      })
+      .catch(err => {
+        if (!pendingConversation) pendingConversation = next;
+        reportGlobalError(err, "persistence.flush.upsertConversation");
+      });
   }
 }
 
@@ -89,8 +105,16 @@ export function startPersistence() {
         if (!storage || !pendingSettings) return;
         const next = pendingSettings;
         pendingSettings = null;
-        void storage.setSettings(next);
-        lastSavedSettingsRaw = JSON.stringify(next);
+        const nextRaw = JSON.stringify(next);
+        void storage
+          .setSettings(next)
+          .then(() => {
+            lastSavedSettingsRaw = nextRaw;
+          })
+          .catch(err => {
+            if (!pendingSettings) pendingSettings = next;
+            reportGlobalError(err, "persistence.debounce.setSettings");
+          });
       }, 200);
     });
 
@@ -109,8 +133,15 @@ export function startPersistence() {
         if (!storage || !pendingConversation) return;
         const next = pendingConversation;
         pendingConversation = null;
-        void storage.upsertConversation(next);
-        lastSavedConversationUpdatedAt = next.updatedAt;
+        void storage
+          .upsertConversation(next)
+          .then(() => {
+            lastSavedConversationUpdatedAt = next.updatedAt;
+          })
+          .catch(err => {
+            if (!pendingConversation) pendingConversation = next;
+            reportGlobalError(err, "persistence.debounce.upsertConversation");
+          });
       }, 250);
     });
 

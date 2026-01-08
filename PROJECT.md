@@ -1,6 +1,6 @@
 # Bubble 项目描述（MVP）
 
-Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主体是一个颜文字角色，会以气泡的方式展示模型输出，并通过“情绪标签”在回复过程中切换表情。对话与设置会落盘到浏览器端存储（优先 IndexedDB / Dexie，失败时回退 `localStorage`），刷新不会丢。
+Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主体是一个颜文字角色，会以气泡的方式展示模型输出，并通过“情绪标签”在回复过程中切换表情。对话与设置会落盘到浏览器端存储（优先 IndexedDB / Dexie，不支持 IndexedDB 时回退 `localStorage`），刷新不会丢。
 
 > MVP 目标：用最小代价跑通交互闭环（输入 → 流式生成 → 气泡逐字显示 → 表情切换 → 历史记录持久化）。
 
@@ -78,7 +78,7 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
 ## 4. 历史记录与持久化
 
 ### 4.1 存储层（Dexie 优先，localStorage fallback）
-当前实现引入了一个存储抽象层，默认优先使用 IndexedDB（Dexie），在不可用/写入失败时自动回退到 `localStorage`。
+当前实现引入了一个存储抽象层：启动时若 IndexedDB（Dexie）可用，则全程使用 Dexie；仅在环境不支持/无法初始化 IndexedDB 时，才启用 `localStorage` 兜底（避免运行时逐操作回退导致数据不一致）。
 
 - localStorage key（fallback / 兼容旧数据）：
   - 设置：`bubble.settings.v1`
@@ -118,12 +118,19 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
 
 - `src/bubble/BubbleApp.tsx`
   - 页面结构与交互绑定（读取 valtio snapshot，调用 actions）
+  - 全局错误捕获（`window.error` / `unhandledrejection`）与弹窗展示
+- `src/bubble/errorHooks.ts`
+  - 全局错误捕获相关 hooks
 - `src/bubble/components/SettingsModal.tsx`
   - 设置弹窗 UI 与表单
 - `src/bubble/components/HistoryModal.tsx`
   - 记录弹窗 UI 与清空逻辑
+- `src/bubble/components/GlobalErrorModal.tsx`
+  - 全局错误弹窗 UI
 - `src/bubble/state/state.ts`
   - 全局状态（valtio proxy）
+- `src/bubble/state/errors.ts`
+  - 全局错误上报与清除（写入 state + console 输出）
 - `src/bubble/state/actions.ts`
   - 业务动作（send/clear/open/close 等）
 - `src/bubble/state/hydration.ts`
@@ -144,7 +151,7 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
 - `src/bubble/constants.ts`
   - 常量配置（存储 key、默认设置、打字机节奏、快捷提示词）
 - `src/bubble/storage/*`
-  - Dexie/localStorage 存储抽象与实现（Dexie 优先，localStorage fallback）
+  - Dexie/localStorage 存储抽象与实现（Dexie 优先，IndexedDB 不可用时 fallback）
 - `src/bubble/storageHooks.ts`
   - 旧版 `useLocalStorageState`（带 debounce），当前 `BubbleApp` 未使用
 - `src/bubble/types.ts`

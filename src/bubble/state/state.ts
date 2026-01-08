@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS } from "../constants";
 import { newConversation } from "../chatUtils";
 import type { Conversation, Settings } from "../types";
 import type { StorageKind } from "../storage";
+import type { GlobalError } from "./errors";
 
 export type BubbleState = {
   settings: Settings;
@@ -11,6 +12,7 @@ export type BubbleState = {
   composerText: string;
   isSending: boolean;
   errorText: string | null;
+  globalError: GlobalError | null;
   isSettingsOpen: boolean;
   isHistoryOpen: boolean;
   hydrationStatus: "idle" | "loading" | "ready" | "error";
@@ -23,6 +25,7 @@ export const bubbleState = proxy<BubbleState>({
   composerText: "",
   isSending: false,
   errorText: null,
+  globalError: null,
   isSettingsOpen: false,
   isHistoryOpen: false,
   hydrationStatus: "idle",

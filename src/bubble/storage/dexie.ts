@@ -91,7 +91,15 @@ export async function createDexieAdapter(): Promise<DexieStorage> {
     },
 
     async upsertConversation(conversation) {
-      await db.conversations.put(conversation);
+      await db.transaction("rw", db.conversations, db.app, async () => {
+        await db.conversations.put(conversation);
+        const row: AppRow = {
+          id: "default",
+          currentConversationId: conversation.id,
+          updatedAt: Date.now(),
+        };
+        await db.app.put(row);
+      });
     },
 
     async clearConversations() {

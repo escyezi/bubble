@@ -16,13 +16,11 @@ async function createBubbleStorage(): Promise<BubbleStorage> {
   const local = createLocalStorageAdapter();
 
   let primary: BubbleStorage = local;
-  let dexie: DexieStorage | null = null;
   try {
-    dexie = await createDexieAdapter();
+    const dexie = await createDexieAdapter();
     await maybeMigrateFromLocalStorage(dexie);
     primary = dexie;
   } catch {
-    dexie = null;
     primary = local;
   }
 
@@ -32,83 +30,36 @@ async function createBubbleStorage(): Promise<BubbleStorage> {
     },
 
     async getSettings() {
-      if (!dexie) return await local.getSettings();
-      try {
-        return await dexie.getSettings();
-      } catch {
-        return await local.getSettings();
-      }
+      return await primary.getSettings();
     },
 
     async setSettings(next) {
-      if (!dexie) return await local.setSettings(next);
-      try {
-        await dexie.setSettings(next);
-      } catch {
-        await local.setSettings(next);
-      }
+      await primary.setSettings(next);
     },
 
     async getCurrentConversationId() {
-      if (!dexie) return await local.getCurrentConversationId();
-      try {
-        return await dexie.getCurrentConversationId();
-      } catch {
-        return await local.getCurrentConversationId();
-      }
+      return await primary.getCurrentConversationId();
     },
 
     async setCurrentConversationId(id) {
-      if (!dexie) return await local.setCurrentConversationId(id);
-      try {
-        await dexie.setCurrentConversationId(id);
-      } catch {
-        await local.setCurrentConversationId(id);
-      }
+      await primary.setCurrentConversationId(id);
     },
 
     async getCurrentConversation() {
-      if (!dexie) return await local.getCurrentConversation();
-      try {
-        return await dexie.getCurrentConversation();
-      } catch {
-        return await local.getCurrentConversation();
-      }
+      return await primary.getCurrentConversation();
     },
 
     async getLatestConversation() {
-      if (!dexie) return await local.getLatestConversation();
-      try {
-        return await dexie.getLatestConversation();
-      } catch {
-        return await local.getLatestConversation();
-      }
+      return await primary.getLatestConversation();
     },
 
     async upsertConversation(conversation) {
-      if (!dexie) return await local.upsertConversation(conversation);
-      try {
-        await dexie.upsertConversation(conversation);
-      } catch {
-        await local.upsertConversation(conversation);
-        return;
-      }
-      try {
-        await dexie.setCurrentConversationId(conversation.id);
-      } catch {
-        // Ignore pointer write failure.
-      }
+      await primary.upsertConversation(conversation);
     },
 
     async clearConversations() {
-      if (dexie) {
-        try {
-          await dexie.clearConversations();
-        } catch {
-          // Ignore and still clear local.
-        }
-      }
-      await local.clearConversations();
+      await primary.clearConversations();
+      if (primary.kind === "dexie") await local.clearConversations();
     },
   };
 }

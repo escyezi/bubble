@@ -2,6 +2,7 @@ import { newConversation } from "../chatUtils";
 import type { Conversation, Settings } from "../types";
 import { bubbleState } from "./state";
 import { ensureHydrated, getHydratedStorage } from "./hydration";
+import { reportGlobalError } from "./errors";
 import { pausePersistence, startPersistence, stopPersistence } from "./persistence";
 import {
   cleanupRuntime,
@@ -70,7 +71,7 @@ async function waitForClearHistory() {
   const p = clearHistoryPromise;
   if (!p) return;
   clearHistoryPromise = null;
-  await p.catch(() => {});
+  await p.catch(err => reportGlobalError(err, "actions.waitForClearHistory"));
 }
 
 export async function send() {

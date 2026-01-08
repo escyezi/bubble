@@ -1,4 +1,5 @@
 import { loadInitialState, type BubbleStorage } from "../storage";
+import { reportGlobalError } from "./errors";
 import { bubbleState } from "./state";
 
 let hydratePromise: Promise<void> | null = null;
@@ -21,11 +22,11 @@ export async function ensureHydrated() {
       bubbleState.settings = initial.settings;
       bubbleState.conversation = initial.conversation;
       bubbleState.hydrationStatus = "ready";
-    } catch {
+    } catch (err) {
       bubbleState.hydrationStatus = "error";
+      reportGlobalError(err, "hydration.ensureHydrated");
     }
   })();
 
   return hydratePromise;
 }
-

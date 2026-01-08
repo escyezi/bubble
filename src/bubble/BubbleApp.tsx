@@ -6,10 +6,13 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { QUICK_PROMPTS } from "./constants";
 import { EMOTICONS, inferEmotionFromText } from "./emotion";
+import { GlobalErrorModal } from "./components/GlobalErrorModal";
 import { HistoryModal } from "./components/HistoryModal";
 import { SettingsModal } from "./components/SettingsModal";
+import { useGlobalErrorHandlers } from "./errorHooks";
 import {
   bubbleState,
+  clearGlobalError,
   cleanupBubbleRuntime,
   clearConversation,
   closeHistory,
@@ -17,6 +20,7 @@ import {
   initBubbleStatePersistence,
   openHistory,
   openSettings,
+  reportGlobalError,
   saveSettings,
   send,
   sendText,
@@ -29,9 +33,12 @@ export function BubbleApp() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const wasSendingRef = useRef(false);
 
+  useGlobalErrorHandlers(reportGlobalError);
+
   useEffect(() => {
     initBubbleStatePersistence();
     inputRef.current?.focus();
+
     return () => {
       cleanupBubbleRuntime();
     };
@@ -144,6 +151,7 @@ export function BubbleApp() {
         onClose={closeHistory}
         onClear={clearConversation}
       />
+      <GlobalErrorModal open={!!snap.globalError} error={snap.globalError} onClose={clearGlobalError} />
     </div>
   );
 }

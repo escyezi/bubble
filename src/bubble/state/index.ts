@@ -1,5 +1,6 @@
 export { bubbleState } from "./state";
 export type { BubbleState } from "./state";
+export type { GlobalError } from "./errors";
 export {
   clearConversation,
   cleanupBubbleRuntime,
@@ -14,4 +15,4 @@ export {
   sendText,
   setComposerText,
 } from "./actions";
-
+export { clearGlobalError, reportGlobalError } from "./errors";

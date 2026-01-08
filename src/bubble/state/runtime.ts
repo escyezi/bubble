@@ -11,6 +11,7 @@ import { createEmotionTagParser, stripEmotionTags } from "../emotionTags";
 import { streamOpenAIChat } from "../openai";
 import type { Emotion, Message } from "../types";
 import { bubbleState } from "./state";
+import { reportGlobalError } from "./errors";
 
 type PendingOp = { type: "text"; text: string } | { type: "emotion"; emotion: Emotion };
 
@@ -127,6 +128,7 @@ export async function sendTextRuntime(text: string) {
     }
     const message = err instanceof Error ? err.message : String(err);
     bubbleState.errorText = message;
+    reportGlobalError(err, "runtime.sendText");
   } finally {
     bubbleState.isSending = false;
   }
@@ -202,4 +204,3 @@ export function getDerivedEmotionFromLastAssistant(text: string | null | undefin
   if (!text?.trim()) return "neutral";
   return inferEmotionFromText(text);
 }
-
