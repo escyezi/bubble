@@ -1,6 +1,6 @@
 # Bubble 项目描述（MVP）
 
-Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主体是一个颜文字角色，会以气泡的方式展示模型输出，并通过“情绪标签”在回复过程中切换表情。对话与设置保存在浏览器 `localStorage` 中，刷新不会丢。
+Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主体是一个颜文字角色，会以气泡的方式展示模型输出，并通过“情绪标签”在回复过程中切换表情。对话与设置会落盘到浏览器端存储（优先 IndexedDB / Dexie，不支持 IndexedDB 时回退 `localStorage`），刷新不会丢。
 
 > MVP 目标：用最小代价跑通交互闭环（输入 → 流式生成 → 气泡逐字显示 → 表情切换 → 历史记录持久化）。
 
@@ -18,7 +18,7 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
 
 ### 1.2 右上角
 - `设置`：弹窗配置 OpenAI 相关信息。
-- `记录`：弹窗查看对话历史，支持清空当前会话。
+- `记录`：弹窗查看当前对话内容，支持清空已落盘的对话记录。
 
 ---
 
@@ -66,7 +66,7 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
   - **text**：进入待输出队列
 - UI 使用打字机模式逐字输出：每次 tick 输出 1 个字符，支持标点停顿。
 
-实现文件：`src/bubble/BubbleApp.tsx`、`src/bubble/chatUtils.ts`
+实现文件：`src/bubble/state/runtime.ts`、`src/bubble/chatUtils.ts`
 
 ### 3.2 文字换行策略
 - **不人为插入换行**。
@@ -77,33 +77,69 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
 
 ## 4. 历史记录与持久化
 
-### 4.1 localStorage
-- 设置存储 key：`bubble.settings.v1`
-- 当前会话存储 key：`bubble.conversation.current.v1`
+### 4.1 存储层（Dexie 优先，localStorage fallback）
+当前实现引入了一个存储抽象层：启动时若 IndexedDB（Dexie）可用，则全程使用 Dexie；仅在环境不支持/无法初始化 IndexedDB 时，才启用 `localStorage` 兜底（避免运行时逐操作回退导致数据不一致）。
 
-实现文件：`src/bubble/storage.ts`
+- localStorage key（fallback / 兼容旧数据）：
+  - 设置：`bubble.settings.v1`
+  - 当前会话：`bubble.conversation.current.v1`
+- IndexedDB（Dexie）：
+  - DB 名：`bubble`
+  - `settings` 表：仅 1 行，主键固定 `id="default"`，带 `updatedAt`
+  - `conversations` 表：以 `Conversation.id` 为主键，带 `updatedAt`
+  - `app` 表：仅 1 行，主键固定 `id="default"`，保存 `currentConversationId`
 
-### 4.2 历史记录“保留标签”的策略
+实现文件：`src/bubble/storage/*`
+
+### 4.2 Hydration（启动读取）
+由于 IndexedDB 是异步接口，启动时会先用默认值渲染，再在挂载后异步加载存储数据覆盖到状态中。Hydrate 完成前会禁用发送（避免“未加载完就写回覆盖”）。
+
+实现文件：`src/bubble/state/state.ts`、`src/bubble/state/hydration.ts`、`src/bubble/state/persistence.ts`
+
+### 4.3 历史记录“保留标签”的策略
 - 主界面显示：使用打字机输出后的 `message.text`（不包含标签）。
 - 历史记录显示：assistant 优先显示 `message.rawText`（包含标签），方便调试/复盘表情切换。
 
 数据结构：`src/bubble/types.ts`
 
-### 4.3 写入节流
-流式过程中消息会频繁更新，`localStorage` 写入是同步操作。MVP 中对写入做了 200ms 的 debounce，避免 UI 卡顿。
+### 4.4 写入节流与类型安全
+流式过程中消息会频繁更新。MVP 中对持久化做了 debounce（settings 200ms / conversation 250ms）避免频繁落盘；同时写入前会对 Valtio 数据做快照并拷贝（`snapshot + structuredClone`，必要时回退 JSON），避免把 Proxy 直接写入 IndexedDB 导致结构化克隆失败。
+
+实现文件：`src/bubble/state/persistence.ts`
+
+### 4.5 清空对话
+“清空”会真正删除存储层的对话记录（Dexie：清空 `conversations` 表并清掉当前会话指针；localStorage：移除对应 key），同时在内存中切换到一个新会话继续聊天，不会把“空会话”写回存储。
+
+实现文件：`src/bubble/state/actions.ts`、`src/bubble/state/persistence.ts`、`src/bubble/storage/*`
 
 ---
 
 ## 5. 主要文件与职责
 
 - `src/bubble/BubbleApp.tsx`
-  - 页面结构、输入/发送逻辑
-  - 流式增量接入 + 情绪标签事件队列
-  - 打字机输出与表情切换（与工具函数协作）
+  - 页面结构与交互绑定（读取 valtio snapshot，调用 actions）
+  - 全局错误捕获（`window.error` / `unhandledrejection`）与弹窗展示
+- `src/bubble/errorHooks.ts`
+  - 全局错误捕获相关 hooks
 - `src/bubble/components/SettingsModal.tsx`
   - 设置弹窗 UI 与表单
 - `src/bubble/components/HistoryModal.tsx`
   - 记录弹窗 UI 与清空逻辑
+- `src/bubble/components/GlobalErrorModal.tsx`
+  - 全局错误弹窗 UI
+- `src/bubble/state/state.ts`
+  - 全局状态（valtio proxy）
+- `src/bubble/state/errors.ts`
+  - 全局错误上报与清除（写入 state + console 输出）
+- `src/bubble/state/actions.ts`
+  - 业务动作（send/clear/open/close 等）
+- `src/bubble/state/hydration.ts`
+  - 启动 hydration：从 storage 读入 settings + 当前会话
+- `src/bubble/state/persistence.ts`
+  - 持久化订阅、debounce、flush、pagehide、pause/restore
+- `src/bubble/state/runtime.ts`
+  - 流式增量接入 + 情绪标签事件队列
+  - 打字机输出与表情切换
 - `src/bubble/openai.ts`
   - OpenAI 兼容 `/chat/completions` 调用
   - SSE 流式解析，回调 `onDeltaText`
@@ -114,8 +150,10 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
   - 消息更新与打字机工具函数（分段、字符节奏等）
 - `src/bubble/constants.ts`
   - 常量配置（存储 key、默认设置、打字机节奏、快捷提示词）
-- `src/bubble/storage.ts`
-  - `useLocalStorageState`（带 debounce）
+- `src/bubble/storage/*`
+  - Dexie/localStorage 存储抽象与实现（Dexie 优先，IndexedDB 不可用时 fallback）
+- `src/bubble/storageHooks.ts`
+  - 旧版 `useLocalStorageState`（带 debounce），当前 `BubbleApp` 未使用
 - `src/bubble/types.ts`
   - Settings/Conversation/Message 类型
 
@@ -137,7 +175,7 @@ Bubble 是一个纯前端的“直播/陪伴型聊天助手”原型：页面主
 
 ### 6.4 localStorage 容量与性能
 - localStorage 容量有限且写入同步。
-- MVP 阶段默认不处理超量与清理策略；后续可切换 IndexedDB。
+- 当前默认使用 IndexedDB（Dexie）落盘，localStorage 仅作为 fallback/兼容旧数据。
 
 ---
 
