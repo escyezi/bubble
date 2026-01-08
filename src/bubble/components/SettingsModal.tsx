@@ -9,16 +9,16 @@ import { Modal } from "./Modal";
 
 type Props = {
   open: boolean;
-  settings: Settings;
+  settings: Readonly<Settings>;
   onSave: (next: Settings) => void;
   onClose: () => void;
 };
 
 export function SettingsModal({ open, settings, onSave, onClose }: Props) {
-  const [draft, setDraft] = useState<Settings>(settings);
+  const [draft, setDraft] = useState<Settings>(() => ({ ...settings }));
 
   useEffect(() => {
-    if (open) setDraft(settings);
+    if (open) setDraft({ ...settings });
   }, [open, settings]);
 
   return (

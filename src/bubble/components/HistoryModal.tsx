@@ -5,7 +5,7 @@ import { Modal } from "./Modal";
 
 type Props = {
   open: boolean;
-  conversation: Conversation;
+  conversation: Readonly<Conversation>;
   onClose: () => void;
   onClear: () => void;
 };
